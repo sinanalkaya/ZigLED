@@ -6,6 +6,7 @@
 #error "Zigbee end device mode is not selected in Tools->Zigbee mode"
 #endif
 
+#include <vector>
 #include <Adafruit_NeoPixel.h>
 #include "Zigbee.h"
 
@@ -20,7 +21,7 @@ static constexpr uint8_t BUTTON_GPIO = 9;   // BOOT/FLASH = GPIO9 (nur INPUT_PUL
 // Globale Variablen für den Button-Zustand
 static uint32_t lastButtonChange = 0;
 static bool     lastButtonState  = true;  // Pullup: HIGH
-static uint8_t  stepLevel        = 50;    // Level-Schritt
+#define         STEP_LEVEL         50     // Level-Schritt
 
 // ---------------- Endpoints ----------------
 ZigbeeColorDimmableLight ep10(10);
@@ -29,9 +30,8 @@ ZigbeeColorDimmableLight ep12(12);
 ZigbeeColorDimmableLight ep13(13);
 ZigbeeColorDimmableLight ep14(14);
 
-ZigbeeColorDimmableLight* eps[] = { &ep10, &ep11, &ep12, &ep13, &ep14 };
+std::vector<ZigbeeColorDimmableLight*> eps = { &ep10, &ep11, &ep12, &ep13, &ep14 };
 static constexpr uint8_t pixelIndex[] = { 0, 1, 2, 3, 4 };
-static constexpr uint8_t EP_COUNT = sizeof(eps) / sizeof(eps[0]);
 
 // ---------------- Helpers ------------------
 static inline void setPixelRGBlvl(uint16_t pixel, bool on,
@@ -100,12 +100,9 @@ void setup() {
 
   pinMode(BUTTON_GPIO, INPUT_PULLUP);
 
-  // Optional: Anzeigenamen/Modelle
-  ep10.setManufacturerAndModel("Espressif", "DIY-C6-PIX5");
-  ep11.setManufacturerAndModel("Espressif", "DIY-C6-PIX5");
-  ep12.setManufacturerAndModel("Espressif", "DIY-C6-PIX5");
-  ep13.setManufacturerAndModel("Espressif", "DIY-C6-PIX5");
-  ep14.setManufacturerAndModel("Espressif", "DIY-C6-PIX5");
+  for (auto ep : eps)   // auto inferiert selbst den Typ
+    // Optional: Anzeigenamen/Modelle
+    ep->setManufacturerAndModel("Espressif", "DIY-C6-PIX5");
 
   // OnIdentify- und OnLightChange-Callbacks
   ep10.onIdentify(identify_ep10);
@@ -121,7 +118,7 @@ void setup() {
   ep14.onLightChange(onLightChange_ep14);
 
   Serial.println("Adding Zigbee endpoints to Zigbee Core");
-  for (uint8_t i=0; i<EP_COUNT; ++i) {
+  for (uint8_t i=0; i<eps.size(); ++i) {
     Zigbee.addEndpoint(eps[i]);
   }
 
@@ -139,18 +136,22 @@ void setup() {
   Serial.println("\nConnected.");
 }
 
-// ---------------- Loop ---------------------
+// Variablen, die die loop permanent benötigt
+bool state;
+uint32_t now;
+
 void loop() {
   // Button: kurz -> Level++, lang -> Factory-Reset
-  bool state = digitalRead(BUTTON_GPIO);
-  uint32_t now = millis();
+  state = digitalRead(BUTTON_GPIO);
+  now = millis();
   if (state != lastButtonState && (now - lastButtonChange) > 30) {
     lastButtonChange = now;
     lastButtonState  = state;
 
     if (state == LOW) {
       uint32_t t0 = millis();
-      while (digitalRead(BUTTON_GPIO) == LOW) {
+      while (!digitalRead(BUTTON_GPIO)) {
+          Serial.println("Factory reseting Zigbee, if you hold for 3s");
         if (millis() - t0 > 3000) {
           Serial.println("Factory reset Zigbee, rebooting in 1s...");
           delay(1000);
@@ -158,8 +159,8 @@ void loop() {
         }
         delay(10);
       }
-      for (uint8_t i=0; i<EP_COUNT; ++i) {
-        uint16_t next = (uint16_t)eps[i]->getLightLevel() + stepLevel;
+      for (uint8_t i=0; i<eps.size(); ++i) {
+        uint16_t next = (uint16_t)eps[i]->getLightLevel() + STEP_LEVEL;
         eps[i]->setLightLevel(next > 255 ? (next - 255) : next);
       }
     }

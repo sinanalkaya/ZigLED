@@ -4,8 +4,8 @@
 Arduino IDE
 
 ## Libraries
-Zigbee Zigbee.h
-WS2812: Adafruit_Neopixel
+ - Zigbee: Zigbee.h (included with the ESP32-C6 board-libraries)
+ - WS2812: Adafruit Neopixel
 
 ## Important information
 for Zigbee2mqtt: the file my_c6pix5.mjs has to be in z2mqtts external converters folder for MQTT to understand there is more than one light
